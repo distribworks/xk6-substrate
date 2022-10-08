@@ -26,6 +26,11 @@ func (c *Client) GetBlockHashLatest() (types.Hash, error) {
 	return c.api.RPC.Chain.GetBlockHashLatest()
 }
 
+// GetBlock returns the block for the given block hash.
+func (c *Client) GetBlock(hash types.Hash) (*types.SignedBlock, error) {
+	return c.api.RPC.Chain.GetBlock(hash)
+}
+
 // PollBlocks polls for new blocks and emits a "block" metric.
 func (c *Client) subscribeNewHeads() {
 	sub, err := c.api.RPC.Chain.SubscribeNewHeads()
@@ -35,7 +40,10 @@ func (c *Client) subscribeNewHeads() {
 	defer sub.Unsubscribe()
 
 	for {
+		now := time.Now()
 		head := <-sub.Chan()
+		d := time.Since(now)
+
 		bh, err := c.api.RPC.Chain.GetBlockHash(uint64(head.Number))
 		if err != nil {
 			panic(err)
@@ -45,6 +53,9 @@ func (c *Client) subscribeNewHeads() {
 		if err != nil {
 			panic(err)
 		}
+
+		// Compute TPS
+		tps := float64(len(block.Block.Extrinsics)) / d.Seconds()
 
 		if c.vu.Context() != nil {
 			metrics.PushIfNotDone(c.vu.Context(), c.vu.State().Samples, metrics.ConnectedSamples{
@@ -57,12 +68,12 @@ func (c *Client) subscribeNewHeads() {
 						Value: float64(head.Number),
 						Time:  time.Now(),
 					},
-					// {
-					// 	Metric: c.metrics.TPS,
-					// 	// Tags: metrics.NewSampleTags(map[string]string{}),
-					// 	Value: tps,
-					// 	Time:  time.Now(),
-					// },
+					{
+						Metric: c.metrics.TPS,
+						// Tags: metrics.NewSampleTags(map[string]string{}),
+						Value: tps,
+						Time:  time.Now(),
+					},
 				},
 			})
 		}
