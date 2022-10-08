@@ -1,4 +1,4 @@
-// xk6 build --with github.com/distribworks/xk6-substrate
+// xk6 build --with github.com/distribworks/xk6-substrate=.
 package substrate
 
 import (
@@ -8,7 +8,8 @@ import (
 	"fmt"
 	"time"
 
-	gsrpc "github.com/centrifuge/go-substrate-rpc-client"
+	gsrpc "github.com/centrifuge/go-substrate-rpc-client/v4"
+	"github.com/centrifuge/go-substrate-rpc-client/v4/config"
 	"github.com/dop251/goja"
 	"go.k6.io/k6/js/common"
 	"go.k6.io/k6/js/modules"
@@ -73,14 +74,14 @@ func (mi *ModuleInstance) NewClient(call goja.ConstructorCall) *goja.Object {
 	}
 
 	if opts.URL == "" {
-		opts.URL = "http://localhost:8545"
+		opts.URL = config.Default().RPCURL
 	}
 
 	if opts.PrivateKey == "" {
 		opts.PrivateKey = privateKey
 	}
 
-	api, err := gsrpc.NewSubstrateAPI("wss://poc3-rpc.polkadot.io")
+	api, err := gsrpc.NewSubstrateAPI(opts.URL)
 	if err != nil {
 		common.Throw(rt, fmt.Errorf("invalid options; reason: %w", err))
 	}
@@ -92,7 +93,7 @@ func (mi *ModuleInstance) NewClient(call goja.ConstructorCall) *goja.Object {
 		// w:       wa,
 	}
 
-	// go client.pollForBlocks()
+	go client.subscribeNewHeads()
 
 	return rt.ToValue(client).ToObject(rt)
 }
@@ -102,19 +103,19 @@ func registerMetrics(vu modules.VU) (ethMetrics, error) {
 	registry := vu.InitEnv().Registry
 	m := ethMetrics{}
 
-	m.RequestDuration, err = registry.NewMetric("ethereum_req_duration", metrics.Trend, metrics.Time)
+	m.RequestDuration, err = registry.NewMetric("substrate_req_duration", metrics.Trend, metrics.Time)
 	if err != nil {
 		return m, err
 	}
-	m.TimeToMine, err = registry.NewMetric("ethereum_time_to_mine", metrics.Trend, metrics.Time)
+	m.TimeToMine, err = registry.NewMetric("substrate_time_to_mine", metrics.Trend, metrics.Time)
 	if err != nil {
 		return m, err
 	}
-	m.Block, err = registry.NewMetric("ethereum_block", metrics.Counter, metrics.Default)
+	m.Block, err = registry.NewMetric("substrate_block", metrics.Counter, metrics.Default)
 	if err != nil {
 		return m, err
 	}
-	m.TPS, err = registry.NewMetric("ethereum_tps", metrics.Gauge, metrics.Default)
+	m.TPS, err = registry.NewMetric("substrate_tps", metrics.Gauge, metrics.Default)
 	if err != nil {
 		return m, err
 	}
